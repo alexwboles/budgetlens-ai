@@ -69,7 +69,7 @@
     cats.forEach(function (id) {
       var c = BL.categoryById(id), v = a.byCat[id];
       var pct = Math.max(3, Math.round(v / max * 100));
-      html += '<div class="bar-row"><div class="bar-label">' + c.icon + " " + esc(c.name) + '</div>' +
+      html += '<div class="bar-row"><div class="bar-label">' + esc(c.name) + '</div>' +
         '<div class="bar-track"><div class="bar-fill" style="width:' + pct + '%"></div></div>' +
         '<div class="bar-val">' + BL.money(v) + "</div></div>";
     });
@@ -101,8 +101,8 @@
   function renderTransactions() {
     var a = state.analysis;
     var txs = a.transactions.slice().sort(function (x, y) { return y.date - x.date; }).slice(0, 150);
-    var opts = BL.CATEGORIES.concat([{ id: "other", name: "Other", icon: "📦" }])
-      .map(function (c) { return '<option value="' + c.id + '">' + c.icon + " " + esc(c.name) + "</option>"; }).join("");
+    var opts = BL.CATEGORIES.concat([{ id: "other", name: "Other" }])
+      .map(function (c) { return '<option value="' + c.id + '">' + esc(c.name) + "</option>"; }).join("");
     var html = '<div class="tx-row tx-head"><span>Date</span><span>Description</span><span class="r">Amount</span><span>Category</span></div>';
     txs.forEach(function (t, i) {
       var d = t.date instanceof Date ? t.date : new Date(t.date);
@@ -142,7 +142,7 @@
     var html = '<div class="sub-total">Detected <strong>' + subs.length + "</strong> recurring charges totaling <strong>" +
       BL.money(total) + "/mo</strong> (" + BL.money(total * 12) + "/yr)</div>";
     subs.forEach(function (s) {
-      html += '<div class="sub-card"><div><div class="sub-name">🔁 ' + esc(s.merchant) + "</div>" +
+      html += '<div class="sub-card"><div><div class="sub-name">' + esc(s.merchant) + "</div>" +
         '<div class="muted">' + esc(s.example) + " · " + s.occurrences + " charges across " + s.months.length + " months</div></div>" +
         '<div class="r"><div><strong>' + BL.money(s.monthly) + "/mo</strong></div>" +
         '<div class="muted">' + BL.money(s.yearly) + '/yr · <span class="cancel">cancel candidate</span></div></div></div>';
@@ -154,8 +154,8 @@
     var a = state.analysis;
     var html = "";
     a.nudges.forEach(function (n) {
-      html += '<div class="nudge"><div class="nudge-icon">' + n.icon + '</div><div><div class="nudge-title">' +
-        esc(n.title) + '</div><div>' + esc(n.text) + "</div></div></div>";
+      html += '<div class="nudge"><div class="nudge-dot"></div><div><div class="nudge-title">' +
+        esc(n.title) + '</div><div class="nudge-body">' + esc(n.text) + "</div></div></div>";
     });
     $("nudgeList").innerHTML = html || '<p class="muted">Load transactions to get personalized nudges.</p>';
   }
