@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BudgetLens — See where your money goes</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<header class="topbar">
+  <div class="logo">🔍 BudgetLens</div>
+  <div class="tagline">See where your money goes</div>
+</header>
+
+<div class="privacy">🔒 100% local — your bank data never leaves this device. No account, no cloud, no tracking.</div>
+
+<nav class="tabs">
+  <button class="tab active" data-tab="upload">📤 Upload</button>
+  <button class="tab" data-tab="dashboard">📊 Dashboard</button>
+  <button class="tab" data-tab="transactions">🧾 Transactions</button>
+  <button class="tab" data-tab="subscriptions">🔁 Subscriptions</button>
+  <button class="tab" data-tab="nudges">💡 Nudges</button>
+</nav>
+
+<main>
+  <section id="pane-upload" class="pane active">
+    <div id="dropZone" class="dropzone">
+      <div class="dz-icon">📄</div>
+      <p><strong>Drop your bank CSV here</strong> or</p>
+      <button id="browseBtn" class="btn">Choose file</button>
+      <input type="file" id="fileInput" accept=".csv,text/csv" hidden>
+      <p class="muted">Needs columns like: <code>Date, Description, Amount</code>. Most banks export this from online banking.</p>
+    </div>
+    <p class="center">No CSV handy? <button id="sampleBtn" class="btn btn-secondary">Try the sample data</button></p>
+    <p id="uploadMsg" class="center"></p>
+  </section>
+
+  <section id="pane-dashboard" class="pane">
+    <div class="stats">
+      <div class="stat"><div class="stat-label">Money in</div><div class="stat-value pos" id="statIn">—</div></div>
+      <div class="stat"><div class="stat-label">Money out</div><div class="stat-value neg" id="statOut">—</div></div>
+      <div class="stat"><div class="stat-label">Kept</div><div class="stat-value" id="statNet">—</div></div>
+      <div class="stat"><div class="stat-label">Transactions</div><div class="stat-value" id="statCount">—</div></div>
+    </div>
+    <div class="grid2">
+      <div class="card">
+        <h2>Spending by category</h2>
+        <div id="catBars"></div>
+      </div>
+      <div class="card">
+        <h2>Top merchants</h2>
+        <div id="topMerchants"></div>
+      </div>
+    </div>
+    <div class="card">
+      <h2>Month over month</h2>
+      <div id="momTable"></div>
+    </div>
+  </section>
+
+  <section id="pane-transactions" class="pane">
+    <div class="card">
+      <h2>Transactions</h2>
+      <p class="muted">Wrong category? Change it — BudgetLens remembers your choice for that merchant. <span class="lowconf">?</span> means it wasn't sure.</p>
+      <div id="txTable"></div>
+    </div>
+  </section>
+
+  <section id="pane-subscriptions" class="pane">
+    <div class="card">
+      <h2>Recurring charges</h2>
+      <div id="subList"><p class="muted">Load transactions to detect subscriptions.</p></div>
+    </div>
+  </section>
+
+  <section id="pane-nudges" class="pane">
+    <div class="card">
+      <h2>Savings nudges</h2>
+      <div id="nudgeList"><p class="muted">Load transactions to get personalized nudges.</p></div>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <p class="muted center">BudgetLens is a local-first tool. Your data stays in your browser. Not financial advice.</p>
+</footer>
+
+<script src="js/categorize.js"></script>
+<script src="js/analyze.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
