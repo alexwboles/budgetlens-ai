@@ -57,6 +57,67 @@ changed ? ok('flow6: merchant override recategorizes to groceries') : bad('flow6
 const months = Object.keys(a.byMonth).sort();
 months.length === 3 ? ok('flow7: month-over-month spans ' + months.join(', ')) : bad('flow7: months = ' + months.join(','));
 
+// Flow 8: budgets — limits flag overspend, monthly average normalizes multi-month data
+const budgets = { dining: 100, groceries: 400 };
+const bstat = A.budgetStatus(a.byCat, budgets, 3);
+const diningRow = bstat.find(r => r.id === 'dining');
+const grocRow = bstat.find(r => r.id === 'groceries');
+(diningRow && grocRow && bstat.every(r => r.limit > 0 && r.pct >= 0))
+  ? ok('flow8: budgetStatus rows for dining (' + A.money(diningRow.spent) + '/' + A.money(diningRow.limit) + ', ' + diningRow.pct + '%) and groceries')
+  : bad('flow8: budgetStatus malformed: ' + JSON.stringify(bstat.map(r => r.id)));
+const overRows = A.budgetStatus(a.byCat, { dining: 1 }, 3);
+(overRows.length === 1 && overRows[0].over === true)
+  ? ok('flow8: $1 dining limit correctly flagged over budget') : bad('flow8: over-budget flag missing');
+
+// Flow 9: month-scoped analysis — filter + re-analyze one month
+const firstMonth = months[0];
+const monthTxs = A.filterTransactionsByMonth(a.transactions, firstMonth);
+const scoped = A.analyze(monthTxs, {});
+(monthTxs.length > 0 && monthTxs.every(t => t.month === firstMonth) && Object.keys(scoped.byMonth).length === 1)
+  ? ok('flow9: ' + monthTxs.length + ' transactions in ' + firstMonth + '; scoped analysis has 1 month')
+  : bad('flow9: month filter broken');
+A.filterTransactionsByMonth(a.transactions, '').length === a.transactions.length
+  ? ok('flow9: empty month filter returns all transactions') : bad('flow9: empty filter broken');
+
+// Flow 9b (regression): the app scopes from ANALYZED transactions (they carry .month),
+// not from rowsToTransactions output (which has no .month field)
+const rawRows = A.rowsToTransactions(A.parseCSV(text));
+const full = A.analyze(rawRows, {});
+const appScoped = A.analyze(A.filterTransactionsByMonth(full.transactions, firstMonth), {});
+('month' in rawRows[0]) === false && appScoped.transactions.length === monthTxs.length
+  ? ok('flow9b: raw rows lack .month; app scopes from analyzed txs -> ' + appScoped.transactions.length + ' txs')
+  : bad('flow9b: regression in month-scoping source');
+
+// Flow 10: CSV export — header, all rows, quoting-safe
+const csv = A.transactionsToCSV(a);
+const csvLines = csv.split('\r\n');
+(csvLines[0] === 'Date,Description,Merchant,Amount,Category,Confidence' && csvLines.length === a.transactions.length + 1)
+  ? ok('flow10: CSV header + ' + (csvLines.length - 1) + ' rows exported')
+  : bad('flow10: CSV malformed: ' + csvLines[0]);
+const quoted = A.transactionsToCSV({ transactions: [{ date: new Date('2026-07-01'), description: 'SAY "HI", CAFE', merchant: 'SAY CAFE', amount: -12.5, categoryName: 'Dining Out', confidence: 'high' }] });
+(/"SAY ""HI"", CAFE"/.test(quoted)) ? ok('flow10: commas/quotes in description are escaped') : bad('flow10: quoting broken');
+
+// Flow 11: subscription dismissal — hide + restore
+const dismissed = {};
+dismissed[a.subscriptions[0].merchant] = true;
+const vis = A.visibleSubscriptions(a.subscriptions, dismissed);
+(vis.length === a.subscriptions.length - 1 && !vis.some(s => s.merchant === a.subscriptions[0].merchant))
+  ? ok('flow11: dismissing hides 1 of ' + a.subscriptions.length + ' subscriptions')
+  : bad('flow11: dismissal broken');
+A.visibleSubscriptions(a.subscriptions, {}).length === a.subscriptions.length
+  ? ok('flow11: empty dismissed map shows all') : bad('flow11: empty dismissed broken');
+
+// Flow 12: transaction search/filter logic — description, merchant, category
+const all = a.transactions;
+const qMatch = all.filter(t => t.description.toLowerCase().includes('starbucks'));
+const noMatch = all.filter(t => t.description.toLowerCase().includes('zzz-no-such-vendor'));
+(qMatch.length >= 2 && qMatch.every(t => /starbucks/i.test(t.description)) && noMatch.length === 0)
+  ? ok('flow12: "starbucks" matches ' + qMatch.length + ' txs; junk query matches none')
+  : bad('flow12: search logic broken');
+const diningTxs = all.filter(t => t.category === 'dining');
+(diningTxs.length > 0 && diningTxs.every(t => t.category === 'dining'))
+  ? ok('flow12: category filter yields ' + diningTxs.length + ' dining transactions') : bad('flow12: category filter broken');
+
 console.log('---');
 console.log('e2e: ' + pass + ' passed, ' + fail + ' failed');
 process.exit(fail ? 1 : 0);

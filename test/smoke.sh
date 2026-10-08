@@ -71,6 +71,53 @@ process.exit(fail ? 1 : 0);
 NODEEOF
 [ $? -eq 0 ] && ok "node logic checks green" || bad "node logic checks had failures"
 
+# new features: budgets, month filter, CSV export, subscription dismissal (node)
+node << 'NODEEOF'
+const BL = require('/home/hatch/workspace/budgetlens-ai/js/categorize.js');
+const A  = require('/home/hatch/workspace/budgetlens-ai/js/analyze.js');
+let pass = 0, fail = 0;
+const ok  = (n) => { pass++; console.log('PASS: ' + n); };
+const bad = (n) => { fail++; console.log('FAIL: ' + n); };
+
+// budgetStatus: pct math, over flag, invalid limits skipped, sorted desc
+const bs = A.budgetStatus({ dining: 250, groceries: 100 }, { dining: 200, groceries: 400, travel: 0, fees: -5 }, 1);
+const dining = bs.find(r => r.id === 'dining'), groc = bs.find(r => r.id === 'groceries');
+(bs.length === 2 && dining.over === true && dining.pct === 125 && groc.over === false && groc.pct === 25 && bs[0].id === 'dining')
+  ? ok('budgetStatus: over-flag, pct math, skips zero/negative limits, sorted desc')
+  : bad('budgetStatus: ' + JSON.stringify(bs));
+const bsm = A.budgetStatus({ dining: 300 }, { dining: 200 }, 3);
+(bsm[0].spent === 100 && bsm[0].over === false)
+  ? ok('budgetStatus: 3-month average normalizes to $100/mo spend') : bad('budgetStatus months: ' + JSON.stringify(bsm));
+
+// filterTransactionsByMonth
+const txs = [{ month: '2026-07' }, { month: '2026-08' }, { month: '2026-07' }];
+(A.filterTransactionsByMonth(txs, '2026-07').length === 2 && A.filterTransactionsByMonth(txs, '').length === 3)
+  ? ok('filterTransactionsByMonth: filters + empty returns all') : bad('filterTransactionsByMonth');
+
+// transactionsToCSV: header, row order by date, amount 2dp
+const csv = A.transactionsToCSV({ transactions: [
+  { date: new Date('2026-08-02T12:00:00Z'), description: 'B', merchant: 'B', amount: -5, categoryName: 'Other', confidence: 'low' },
+  { date: new Date('2026-07-01T12:00:00Z'), description: 'A', merchant: 'A', amount: 10, categoryName: 'Income', confidence: 'manual' }
+]});
+const L = csv.split('\r\n');
+(L[0] === 'Date,Description,Merchant,Amount,Category,Confidence' && L[1].indexOf('2026-07-01') === 0 && /10\.00/.test(L[1]) && /-5\.00/.test(L[2]))
+  ? ok('transactionsToCSV: header, date-sorted, 2dp amounts') : bad('transactionsToCSV: ' + csv.slice(0, 100));
+
+// visibleSubscriptions
+const subs = [{ merchant: 'A' }, { merchant: 'B' }];
+const v = A.visibleSubscriptions(subs, { A: true });
+(v.length === 1 && v[0].merchant === 'B') ? ok('visibleSubscriptions: dismissed hidden') : bad('visibleSubscriptions');
+
+console.log('NEW_PASS=' + pass + ' NEW_FAIL=' + fail);
+process.exit(fail ? 1 : 0);
+NODEEOF
+[ $? -eq 0 ] && ok "new-feature node checks green" || bad "new-feature node checks had failures"
+
+# new DOM ids present
+for id in monthPick budgetForm budgetList txSearch txCatFilter txExport txPrint txCount pane-budgets; do
+  grep -q "id=\"$id\"" index.html && ok "index.html has #$id" || bad "index.html missing #$id"
+done
+
 echo "---"
 echo "smoke: $PASS passed, $FAIL failed"
 [ "$FAIL" -eq 0 ]

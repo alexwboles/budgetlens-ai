@@ -78,6 +78,69 @@
     return (neg ? "-$" : "$") + s;
   }
 
+  function csvCell(v) {
+    var s = String(v == null ? "" : v);
+    return /[",\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+  }
+
+  // Monthly category budgets: budgets = { catId: monthlyLimit }.
+  // byCat may span several months — months normalizes spend to a monthly average.
+  // Returns [{ id, name, icon, spent, limit, pct, over }], highest pct first.
+  function budgetStatus(byCat, budgets, months) {
+    months = Math.max(1, parseInt(months, 10) || 1);
+    budgets = budgets || {};
+    var out = [];
+    Object.keys(budgets).forEach(function (id) {
+      var limit = parseFloat(budgets[id]);
+      if (!(limit > 0)) return;
+      var c = BL.categoryById ? BL.categoryById(id) : null;
+      var spent = Math.round(((byCat || {})[id] || 0) / months * 100) / 100;
+      out.push({
+        id: id,
+        name: c ? c.name : id,
+        icon: c ? (c.icon || "") : "",
+        spent: spent,
+        limit: limit,
+        pct: Math.round(spent / limit * 100),
+        over: spent > limit
+      });
+    });
+    out.sort(function (a, b) { return b.pct - a.pct; });
+    return out;
+  }
+
+  // Transactions for one calendar month (YYYY-MM); falsy monthKey returns all.
+  function filterTransactionsByMonth(transactions, mk) {
+    if (!mk) return (transactions || []).slice();
+    return (transactions || []).filter(function (t) { return t.month === mk; });
+  }
+
+  // Full categorized-transaction export for spreadsheets.
+  function transactionsToCSV(analysis) {
+    var rows = [["Date", "Description", "Merchant", "Amount", "Category", "Confidence"]];
+    var txs = ((analysis || {}).transactions || []).slice().sort(function (a, b) {
+      var da = a.date instanceof Date ? a.date : new Date(a.date);
+      var db = b.date instanceof Date ? b.date : new Date(b.date);
+      return da - db;
+    });
+    txs.forEach(function (t) {
+      var d = t.date instanceof Date ? t.date : new Date(t.date);
+      rows.push([
+        isNaN(d.getTime()) ? "" : d.toISOString().slice(0, 10),
+        t.description, t.merchant,
+        (Math.round(t.amount * 100) / 100).toFixed(2),
+        t.categoryName, t.confidence
+      ]);
+    });
+    return rows.map(function (r) { return r.map(csvCell).join(","); }).join("\r\n");
+  }
+
+  // Hide dismissed recurring charges (dismissed = { merchant: true }).
+  function visibleSubscriptions(subscriptions, dismissed) {
+    dismissed = dismissed || {};
+    return (subscriptions || []).filter(function (s) { return !dismissed[s.merchant]; });
+  }
+
   function monthKey(d) { return d.getFullYear() + "-" + ("0" + (d.getMonth() + 1)).slice(-2); }
 
   function analyze(transactions, overrides) {
@@ -178,6 +241,8 @@
   return {
     parseCSV: parseCSV, parseAmount: parseAmount, parseDate: parseDate,
     rowsToTransactions: rowsToTransactions, analyze: analyze,
-    detectSubscriptions: detectSubscriptions, money: money, monthKey: monthKey
+    detectSubscriptions: detectSubscriptions, money: money, monthKey: monthKey,
+    budgetStatus: budgetStatus, filterTransactionsByMonth: filterTransactionsByMonth,
+    transactionsToCSV: transactionsToCSV, visibleSubscriptions: visibleSubscriptions
   };
 });

@@ -32,6 +32,7 @@
   <div class="tabs-inner">
     <button class="tab active" data-tab="upload">Upload</button>
     <button class="tab" data-tab="dashboard">Dashboard</button>
+    <button class="tab" data-tab="budgets">Budgets</button>
     <button class="tab" data-tab="transactions">Transactions</button>
     <button class="tab" data-tab="subscriptions">Subscriptions</button>
     <button class="tab" data-tab="nudges">Nudges</button>
@@ -64,6 +65,10 @@
   </section>
 
   <section id="pane-dashboard" class="pane">
+    <div class="dash-tools">
+      <label for="monthPick">Month</label>
+      <select id="monthPick"><option value="">All months</option></select>
+    </div>
     <div class="statband">
       <div class="stat"><div class="stat-label">Money in</div><div class="stat-value pos" id="statIn">&mdash;</div></div>
       <div class="stat"><div class="stat-label">Money out</div><div class="stat-value neg" id="statOut">&mdash;</div></div>
@@ -89,10 +94,35 @@
     </div>
   </section>
 
+  <section id="pane-budgets" class="pane">
+    <div class="card">
+      <h2>Monthly budgets</h2>
+      <p class="muted">Set a monthly spending limit per category. BudgetLens flags the ones you blow past — scoped to the month picked on the dashboard.</p>
+      <div id="budgetForm" class="budget-form"></div>
+    </div>
+    <div class="card">
+      <h2>Budget status</h2>
+      <div id="budgetList"><p class="muted">Load transactions to set budgets.</p></div>
+    </div>
+  </section>
+
   <section id="pane-transactions" class="pane">
     <div class="card">
-      <h2>Transactions</h2>
-      <p class="muted">Wrong category? Change it &mdash; BudgetLens remembers your choice for that merchant. <span class="lowconf">?</span> means it wasn't sure.</p>
+      <div class="card-head">
+        <div>
+          <h2>Transactions</h2>
+          <p class="muted">Wrong category? Change it &mdash; BudgetLens remembers your choice for that merchant. <span class="lowconf">?</span> means it wasn't sure.</p>
+        </div>
+        <div class="head-actions">
+          <button id="txExport" class="btn btn-secondary">Export CSV</button>
+          <button id="txPrint" class="btn btn-secondary">Print report</button>
+        </div>
+      </div>
+      <div class="tx-tools">
+        <input id="txSearch" type="text" placeholder="Search description or merchant…" autocomplete="off">
+        <select id="txCatFilter"><option value="all">All categories</option></select>
+        <span class="muted small" id="txCount"></span>
+      </div>
       <div id="txTable"></div>
     </div>
   </section>

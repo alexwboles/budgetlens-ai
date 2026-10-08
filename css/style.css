@@ -253,3 +253,58 @@ footer { max-width: 1120px; margin: 0 auto; padding: 0 24px 34px; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
 }
+
+/* ---------- new: dashboard tools, transaction tools, budgets ---------- */
+.card-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; flex-wrap: wrap; }
+.card-head h2 { margin-top: 0; }
+.head-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+
+.dash-tools {
+  display: flex; align-items: center; gap: 10px;
+  margin-bottom: 14px;
+}
+.dash-tools label { font-size: 13px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
+.dash-tools select { width: auto; min-width: 170px; }
+
+.tx-tools {
+  display: grid; grid-template-columns: 1fr 220px auto;
+  gap: 10px; align-items: center;
+  margin: 14px 0 6px;
+}
+.tx-tools input, .tx-tools select { margin: 0; }
+
+.budget-form {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 10px 16px; margin-bottom: 6px;
+}
+.budget-field { display: flex; align-items: center; gap: 10px; font-size: 14px; }
+.budget-field span { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.budget-field input { width: 110px; flex: none; }
+.budget-actions { display: flex; gap: 10px; margin-top: 16px; grid-column: 1 / -1; }
+
+.budget-alert {
+  background: #fdeee9; border: 1px solid #f0b9a4; color: #9a3409;
+  border-radius: 0; padding: 12px 16px; font-size: 14px; margin-bottom: 14px;
+}
+.budget-ok {
+  background: var(--accent-soft); border: 1px solid var(--accent-line); color: var(--accent-deep);
+  border-radius: 0; padding: 12px 16px; font-size: 14px; margin-bottom: 14px;
+}
+.bar-row.over .bar-label { color: #b3261e; font-weight: 700; }
+.bar-fill.over { background: #c2410c; }
+
+.linklike {
+  background: none; border: none; padding: 0; cursor: pointer;
+  color: var(--accent-deep); font-size: 13px; font-weight: 700; text-decoration: underline;
+}
+.btn-small { padding: 7px 12px; font-size: 12.5px; }
+
+/* ---------- print: full report, all panes stacked ---------- */
+@media print {
+  .topbar, .tabs, footer, .tx-tools, .dash-tools, .head-actions, #pane-upload,
+  .budget-form, [data-dismiss], #subRestore, .linklike { display: none !important; }
+  .pane { display: block !important; animation: none; }
+  body { background: #fff; }
+  main { max-width: none; padding: 0; }
+  .card { box-shadow: none; break-inside: avoid; }
+}
