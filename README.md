@@ -11,8 +11,8 @@ The average person leaks hundreds of dollars a year to subscriptions they forgot
 BudgetLens runs **100% locally in your browser**. Drop in a CSV export from your bank and it:
 
 1. **Categorizes every transaction** into 13 categories (Dining, Groceries, Transport, Utilities, Subscriptions, Entertainment, Shopping, Health, Housing, Travel, Fees, Income, Other) using local keyword rules — with a confidence flag when it's unsure, and one-click manual correction it remembers per merchant.
-2. **Shows a dashboard** — money in/out/kept, spending-by-category bar charts, top merchants, month-over-month comparison.
-3. **Detects subscriptions** — recurring charges across months are flagged with monthly and yearly cost, so you can see that "$14.99/mo" is really "$180/yr".
+2. **Shows a dashboard** — money in/out/kept, spending-by-category bar charts, top merchants, month-over-month comparison, plus a **spending-pace card** ($/day so far, projected month-end total vs. last month), a **monthly savings-goal meter** (kept vs. target), and a **possible-duplicates** list.
+3. **Detects subscriptions** — recurring charges across months are flagged with monthly and yearly cost, so you can see that "$14.99/mo" is really "$180/yr". Possible duplicate charges (same merchant + amount twice within a week) are flagged separately.
 4. **Nudges you** — plain-language observations like "Cooking two more nights a week could save roughly $96/month."
 
 Optional: set `OPENAI_API_KEY` for enhanced insights in a future version — everything works fully offline without it.
