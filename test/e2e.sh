@@ -118,6 +118,27 @@ const diningTxs = all.filter(t => t.category === 'dining');
 (diningTxs.length > 0 && diningTxs.every(t => t.category === 'dining'))
   ? ok('flow12: category filter yields ' + diningTxs.length + ' dining transactions') : bad('flow12: category filter broken');
 
+// Flow 13: duplicates surface real pairs in the sample data (none crash, shape sane)
+const eDups = A.detectDuplicates(a.transactions);
+(Array.isArray(eDups) && eDups.every(g => g.txs.length >= 2 && g.merchant))
+  ? ok('flow13: duplicates scan clean on sample data (' + eDups.length + ' groups)') : bad('flow13: duplicates broken');
+
+// Flow 14: savings goal + spend pace over the full analyzed sample
+const g = A.savingsGoalStatus(a.totalIn, a.totalOut, 2000);
+const p = A.spendPace(a.transactions);
+(g && g.kept === Math.round((a.totalIn - a.totalOut) * 100) / 100 && typeof g.onTrack === 'boolean')
+  ? ok('flow14: savings goal status consistent with analysis totals (kept ' + A.money(g.kept) + ')') : bad('flow14: goal status broken');
+(p && p.spent >= 0 && p.perDay >= 0 && p.projected >= p.spent && typeof p.lastMonth === 'number')
+  ? ok('flow14: spend pace coherent (projected ' + A.money(p.projected) + ' >= spent ' + A.money(p.spent) + ')') : bad('flow14: pace broken');
+
+// Flow 15: dashboard DOM hosts the three new widgets
+const html = fs.readFileSync('/home/hatch/workspace/budgetlens-ai/index.html', 'utf8');
+(/id="paceBox"/.test(html) && /id="goalBox"/.test(html) && /id="dupeBox"/.test(html))
+  ? ok('flow15: dashboard has paceBox, goalBox, dupeBox') : bad('flow15: dashboard widgets missing');
+const appJs = fs.readFileSync('/home/hatch/workspace/budgetlens-ai/js/app.js', 'utf8');
+(/renderPace\(\)/.test(appJs) && /renderGoal\(\)/.test(appJs) && /renderDupes\(\)/.test(appJs) && /bl_goal/.test(appJs))
+  ? ok('flow15: app renders pace/goal/duplicates and persists the goal') : bad('flow15: app wiring missing');
+
 console.log('---');
 console.log('e2e: ' + pass + ' passed, ' + fail + ' failed');
 process.exit(fail ? 1 : 0);

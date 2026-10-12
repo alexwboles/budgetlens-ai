@@ -108,6 +108,36 @@ const subs = [{ merchant: 'A' }, { merchant: 'B' }];
 const v = A.visibleSubscriptions(subs, { A: true });
 (v.length === 1 && v[0].merchant === 'B') ? ok('visibleSubscriptions: dismissed hidden') : bad('visibleSubscriptions');
 
+// detectDuplicates: same merchant + amount within 7 days flags; income ignored
+const dtx = [
+  { date: new Date('2026-10-01T12:00:00Z'), description: 'GYM', merchant: 'GYM', amount: -29.99 },
+  { date: new Date('2026-10-04T12:00:00Z'), description: 'GYM', merchant: 'GYM', amount: -29.99 },
+  { date: new Date('2026-10-20T12:00:00Z'), description: 'GYM', merchant: 'GYM', amount: -29.99 },
+  { date: new Date('2026-10-02T12:00:00Z'), description: 'GYM', merchant: 'GYM', amount: -49.99 },
+  { date: new Date('2026-10-03T12:00:00Z'), description: 'PAY', merchant: 'PAY', amount: 100 }
+];
+const dups = A.detectDuplicates(dtx);
+(dups.length === 1 && dups[0].merchant === 'GYM' && dups[0].txs.length === 2)
+  ? ok('detectDuplicates: one 7-day pair flagged, lone + different-amount + income ignored') : bad('detectDuplicates: ' + JSON.stringify(dups.map(d => d.txs.length)));
+(A.detectDuplicates([]).length === 0) ? ok('detectDuplicates: empty -> []') : bad('detectDuplicates empty');
+
+// savingsGoalStatus: kept vs goal, onTrack flag, null without goal
+const g1 = A.savingsGoalStatus(5000, 3200, 1500);
+const g2 = A.savingsGoalStatus(5000, 4200, 1500);
+(g1 && g1.kept === 1800 && g1.onTrack && g1.pct === 120 && g2 && !g2.onTrack && g2.pct === 53)
+  ? ok('savingsGoalStatus: kept/onTrack/pct math') : bad('savingsGoalStatus: ' + JSON.stringify([g1, g2]));
+(A.savingsGoalStatus(5000, 3200, '') === null && A.savingsGoalStatus(5000, 3200, 0) === null)
+  ? ok('savingsGoalStatus: no goal -> null') : bad('savingsGoalStatus null');
+
+// spendPace: per-day, projection, last-month comparison (fixed "now")
+const ptx = [
+  { date: new Date('2026-10-12T12:00:00Z'), month: '2026-10', description: 'A', merchant: 'A', amount: -120 },
+  { date: new Date('2026-09-05T12:00:00Z'), month: '2026-09', description: 'B', merchant: 'B', amount: -900 }
+];
+const pc = A.spendPace(ptx, new Date('2026-10-12T12:00:00Z').getTime());
+(pc.spent === 120 && pc.perDay === 10 && pc.projected === 310 && pc.lastMonth === 900 && pc.dayOfMonth === 12 && pc.daysInMonth === 31)
+  ? ok('spendPace: $10/day, $310 projected, $900 last month') : bad('spendPace: ' + JSON.stringify(pc));
+
 console.log('NEW_PASS=' + pass + ' NEW_FAIL=' + fail);
 process.exit(fail ? 1 : 0);
 NODEEOF

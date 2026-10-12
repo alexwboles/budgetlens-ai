@@ -135,6 +135,80 @@
     return rows.map(function (r) { return r.map(csvCell).join(","); }).join("\r\n");
   }
 
+  // Possible duplicate charges: same merchant + same amount, at least twice
+  // within any 7-day window. Income is ignored. Returns
+  // [{ merchant, amount, txs }] sorted newest-first.
+  function detectDuplicates(transactions) {
+    var groups = {};
+    (transactions || []).forEach(function (t) {
+      if (!(t.amount < 0)) return;
+      var d = t.date instanceof Date ? t.date : new Date(t.date);
+      if (isNaN(d.getTime())) return;
+      var key = t.merchant + "|" + Math.round(t.amount * 100);
+      (groups[key] = groups[key] || []).push({ t: t, ms: d.getTime() });
+    });
+    var out = [];
+    Object.keys(groups).forEach(function (k) {
+      var g = groups[k].sort(function (a, b) { return a.ms - b.ms; });
+      var cluster = [], last = null;
+      function flush() { if (cluster.length >= 2) {
+        out.push({ merchant: cluster[0].t.merchant, amount: cluster[0].t.amount,
+                   txs: cluster.map(function (x) { return x.t; }) });
+      } cluster = []; }
+      g.forEach(function (x) {
+        if (last != null && x.ms - last > 7 * 86400000) flush();
+        cluster.push(x); last = x.ms;
+      });
+      flush();
+    });
+    out.sort(function (a, b) {
+      var da = Math.max.apply(null, a.txs.map(function (t) { return new Date(t.date).getTime(); }));
+      var db = Math.max.apply(null, b.txs.map(function (t) { return new Date(t.date).getTime(); }));
+      return db - da;
+    });
+    return out;
+  }
+
+  // Monthly savings goal: kept = in - out; onTrack when kept >= goal.
+  // Returns null when no positive goal is set.
+  function savingsGoalStatus(totalIn, totalOut, goal) {
+    var g = parseFloat(goal);
+    if (!(g > 0)) return null;
+    var kept = totalIn - totalOut;
+    return {
+      goal: g,
+      kept: Math.round(kept * 100) / 100,
+      pct: Math.max(0, Math.round((kept / g) * 100)),
+      onTrack: kept >= g
+    };
+  }
+
+  // Spending pace for the current month: $/day so far, projected month-end
+  // total, and last month's total for comparison. nowTs injectable for tests.
+  function spendPace(transactions, nowTs) {
+    var now = nowTs != null ? new Date(nowTs) : new Date();
+    var mk = monthKey(now);
+    var prevMk = monthKey(new Date(now.getFullYear(), now.getMonth() - 1, 1));
+    var day = now.getDate();
+    var daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+    var spent = 0, prevSpent = 0;
+    (transactions || []).forEach(function (t) {
+      if (!(t.amount < 0)) return;
+      if (t.month === mk) spent += -t.amount;
+      else if (t.month === prevMk) prevSpent += -t.amount;
+    });
+    var perDay = day > 0 ? spent / day : 0;
+    return {
+      month: mk,
+      dayOfMonth: day,
+      daysInMonth: daysInMonth,
+      spent: Math.round(spent * 100) / 100,
+      perDay: Math.round(perDay * 100) / 100,
+      projected: Math.round(perDay * daysInMonth * 100) / 100,
+      lastMonth: Math.round(prevSpent * 100) / 100
+    };
+  }
+
   // Hide dismissed recurring charges (dismissed = { merchant: true }).
   function visibleSubscriptions(subscriptions, dismissed) {
     dismissed = dismissed || {};
@@ -243,6 +317,8 @@
     rowsToTransactions: rowsToTransactions, analyze: analyze,
     detectSubscriptions: detectSubscriptions, money: money, monthKey: monthKey,
     budgetStatus: budgetStatus, filterTransactionsByMonth: filterTransactionsByMonth,
-    transactionsToCSV: transactionsToCSV, visibleSubscriptions: visibleSubscriptions
+    transactionsToCSV: transactionsToCSV, visibleSubscriptions: visibleSubscriptions,
+    detectDuplicates: detectDuplicates, savingsGoalStatus: savingsGoalStatus,
+    spendPace: spendPace
   };
 });

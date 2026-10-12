@@ -2,7 +2,7 @@
 (function () {
   "use strict";
   var BL = window.BudgetLens;
-  var state = { analysis: null, overrides: {}, txCount: 0, rawTxs: [], month: "", budgets: {}, dismissed: {}, txQ: "", txCat: "all" };
+  var state = { analysis: null, overrides: {}, txCount: 0, rawTxs: [], month: "", budgets: {}, dismissed: {}, txQ: "", txCat: "all", goal: "" };
 
   function $(id) { return document.getElementById(id); }
 
@@ -13,6 +13,8 @@
     catch (e) { state.budgets = {}; }
     try { state.dismissed = JSON.parse(localStorage.getItem("bl_dismissed") || "{}"); }
     catch (e) { state.dismissed = {}; }
+    try { state.goal = localStorage.getItem("bl_goal") || ""; }
+    catch (e) { state.goal = ""; }
   }
   function saveStore() {
     try {
@@ -58,6 +60,9 @@
     if (!state.analysis) return;
     renderMonthPick();
     renderDashboard();
+    renderPace();
+    renderGoal();
+    renderDupes();
     renderBudgets();
     renderTransactions();
     renderSubscriptions();
@@ -135,6 +140,59 @@
         '</span><span class="' + (kept >= 0 ? "pos" : "neg") + '">' + BL.money(kept) + "</span></div>";
     });
     $("momTable").innerHTML = html;
+  }
+
+  function renderPace() {
+    var host = $("paceBox");
+    if (!host || !state.analysis) return;
+    var p = BL.spendPace(state.rawTxs);
+    host.innerHTML =
+      '<div class="pace-line"><b>' + BL.money(p.perDay) + '</b><span>/day so far this month</span></div>' +
+      '<div class="pace-line">On pace for <b>' + BL.money(p.projected) + '</b> by month-end</div>' +
+      '<div class="pace-line muted">Last month you spent ' + BL.money(p.lastMonth) + ' · ' +
+      p.dayOfMonth + ' of ' + p.daysInMonth + ' days in</div>';
+  }
+
+  function renderGoal() {
+    var host = $("goalBox");
+    if (!host || !state.analysis) return;
+    var a = scopedAnalysis();
+    var st = BL.savingsGoalStatus(a.totalIn, a.totalOut, state.goal);
+    var html = '<div class="goal-form"><label>Monthly goal $<input type="number" id="goalInput" min="0" step="50" value="' +
+      esc(state.goal || "") + '"></label><button class="btn btn-small" id="goalSave">Save</button></div>';
+    if (st) {
+      var pct = Math.max(3, Math.min(100, st.pct));
+      html += '<div class="bar-row"><div class="bar-label">' + (st.onTrack ? "Goal met" : "Kept so far") + '</div>' +
+        '<div class="bar-track"><div class="bar-fill' + (st.onTrack ? "" : " behind") + '" style="width:' + pct + '%"></div></div>' +
+        '<div class="bar-val">' + BL.money(st.kept) + " / " + BL.money(st.goal) + "</div></div>";
+    } else {
+      html += '<p class="muted small">Set a goal to track your progress.</p>';
+    }
+    host.innerHTML = html;
+    $("goalSave").addEventListener("click", function () {
+      state.goal = $("goalInput").value;
+      try { localStorage.setItem("bl_goal", String(state.goal || "")); } catch (e) {}
+      renderGoal();
+    });
+  }
+
+  function renderDupes() {
+    var host = $("dupeBox");
+    if (!host || !state.analysis) return;
+    var dups = BL.detectDuplicates(state.rawTxs);
+    if (!dups.length) {
+      host.innerHTML = '<p class="muted">No duplicate charges found. Clean books.</p>';
+      return;
+    }
+    host.innerHTML = dups.map(function (g) {
+      return '<div class="sub-card"><div><div class="sub-name">' + esc(g.merchant) + "</div>" +
+        '<div class="muted">' + g.txs.map(function (t) {
+          var d = t.date instanceof Date ? t.date : new Date(t.date);
+          return esc(t.description) + " · " + d.toISOString().slice(0, 10);
+        }).join("<br>") + '</div></div>' +
+        '<div class="r"><div><strong>' + BL.money(g.amount) + '</strong></div>' +
+        '<div class="muted">×' + g.txs.length + " charges</div></div></div>";
+    }).join("");
   }
 
   function renderTransactions() {

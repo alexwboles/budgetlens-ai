@@ -308,3 +308,12 @@ footer { max-width: 1120px; margin: 0 auto; padding: 0 24px 34px; }
   main { max-width: none; padding: 0; }
   .card { box-shadow: none; break-inside: avoid; }
 }
+
+/* ---------- pace + savings goal + duplicates ---------- */
+.pace-line { font-size: 14.5px; margin: 6px 0; }
+.pace-line b { font-size: 18px; }
+.pace-line span { color: var(--muted); font-size: 13px; margin-left: 4px; }
+.goal-form { display: flex; align-items: flex-end; gap: 10px; margin-bottom: 12px; }
+.goal-form label { font-size: 13.5px; font-weight: 600; }
+.goal-form input { width: 110px; padding: 7px 9px; border: 1.5px solid var(--border); font-size: 14px; margin-left: 4px; }
+.bar-fill.behind { background: #b98a2f; }
