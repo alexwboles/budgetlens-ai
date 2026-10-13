@@ -209,6 +209,97 @@
     };
   }
 
+  // Recurring income: consistent deposits (paychecks, payouts) appearing in
+  // at least 2 calendar months. Mirrors detectSubscriptions for amount > 0.
+  // Returns [{ merchant, example, monthly, yearly, occurrences, months }]
+  // sorted by yearly, descending.
+  function detectRecurringIncome(byMerchant) {
+    var out = [];
+    Object.keys(byMerchant || {}).forEach(function (merch) {
+      var g = byMerchant[merch];
+      var deposits = g.txs.filter(function (t) { return t.amount > 0; }).map(function (t) { return t.amount; });
+      if (deposits.length < 2) return;
+      var months = {};
+      g.txs.forEach(function (t) { months[t.month] = true; });
+      if (Object.keys(months).length < 2) return;
+      var sorted = deposits.slice().sort(function (a, b) { return a - b; });
+      var median = sorted[Math.floor(sorted.length / 2)];
+      var consistent = deposits.every(function (c) { return Math.abs(c - median) / median <= 0.15; });
+      if (!consistent) return;
+      out.push({
+        merchant: merch,
+        example: g.txs[0].description,
+        monthly: median,
+        yearly: median * 12,
+        occurrences: deposits.length,
+        months: Object.keys(months).sort()
+      });
+    });
+    out.sort(function (a, b) { return b.yearly - a.yearly; });
+    return out;
+  }
+
+  // Unusually large single expenses: a charge >= 3x its category's median
+  // spend (and >= $50), with at least 3 transactions in the category so the
+  // median means something. Returns [{ date, description, merchant, amount,
+  // categoryName, median, ratio }] sorted by ratio desc.
+  function detectOutliers(transactions) {
+    var byCat = {};
+    (transactions || []).forEach(function (t) {
+      if (!(t.amount < 0)) return;
+      (byCat[t.category] = byCat[t.category] || []).push(-t.amount);
+    });
+    var medians = {};
+    Object.keys(byCat).forEach(function (c) {
+      var v = byCat[c].slice().sort(function (a, b) { return a - b; });
+      if (v.length >= 3) medians[c] = v[Math.floor(v.length / 2)];
+    });
+    var out = [];
+    (transactions || []).forEach(function (t) {
+      if (!(t.amount < 0)) return;
+      var med = medians[t.category];
+      if (!(med > 0)) return;
+      var amt = -t.amount;
+      if (amt >= 50 && amt >= med * 3) {
+        out.push({
+          date: t.date, description: t.description, merchant: t.merchant,
+          amount: t.amount, categoryName: t.categoryName,
+          median: Math.round(med * 100) / 100,
+          ratio: Math.round(amt / med * 10) / 10
+        });
+      }
+    });
+    out.sort(function (a, b) { return b.ratio - a.ratio; });
+    return out;
+  }
+
+  // Per-category monthly trend: latest month's spend vs the average of
+  // earlier months. Needs >= 2 months with spend. Returns [{ id, name,
+  // icon, last, avg, change, pct, up }] sorted by |pct| desc.
+  function categoryTrends(byCatMonth) {
+    var out = [];
+    Object.keys(byCatMonth || {}).forEach(function (id) {
+      var months = Object.keys(byCatMonth[id]).sort();
+      if (months.length < 2) return;
+      var last = byCatMonth[id][months[months.length - 1]];
+      var prev = months.slice(0, -1).map(function (m) { return byCatMonth[id][m]; });
+      var avg = prev.reduce(function (s, v) { return s + v; }, 0) / prev.length;
+      if (!(avg > 0)) return;
+      var change = last - avg;
+      var c = BL.categoryById ? BL.categoryById(id) : null;
+      out.push({
+        id: id, name: c ? c.name : id, icon: c ? (c.icon || "") : "",
+        last: Math.round(last * 100) / 100,
+        avg: Math.round(avg * 100) / 100,
+        change: Math.round(change * 100) / 100,
+        pct: Math.round(change / avg * 100),
+        up: change > 0
+      });
+    });
+    out.sort(function (a, b) { return Math.abs(b.pct) - Math.abs(a.pct); });
+    return out;
+  }
+
   // Hide dismissed recurring charges (dismissed = { merchant: true }).
   function visibleSubscriptions(subscriptions, dismissed) {
     dismissed = dismissed || {};
@@ -233,7 +324,7 @@
       };
     });
 
-    var byCat = {}, byMerchant = {}, byMonth = {};
+    var byCat = {}, byMerchant = {}, byMonth = {}, byCatMonth = {};
     var totalIn = 0, totalOut = 0;
     txs.forEach(function (t) {
       if (t.amount >= 0) totalIn += t.amount; else totalOut += -t.amount;
@@ -242,12 +333,18 @@
       m.total += t.amount; m.count++; m.txs.push(t);
       var mo = byMonth[t.month] || (byMonth[t.month] = { in: 0, out: 0 });
       if (t.amount >= 0) mo.in += t.amount; else mo.out += -t.amount;
+      if (t.amount < 0) {
+        var cm = byCatMonth[t.category] || (byCatMonth[t.category] = {});
+        cm[t.month] = (cm[t.month] || 0) + -t.amount;
+      }
     });
 
     var subs = detectSubscriptions(byMerchant);
+    var rinc = detectRecurringIncome(byMerchant);
     var nudges = buildNudges(byCat, subs, txs, totalIn, totalOut);
     return { transactions: txs, byCat: byCat, byMerchant: byMerchant, byMonth: byMonth,
-             totalIn: totalIn, totalOut: totalOut, subscriptions: subs, nudges: nudges };
+             byCatMonth: byCatMonth,
+             totalIn: totalIn, totalOut: totalOut, subscriptions: subs, recurringIncome: rinc, nudges: nudges };
   }
 
   function detectSubscriptions(byMerchant) {
@@ -319,6 +416,7 @@
     budgetStatus: budgetStatus, filterTransactionsByMonth: filterTransactionsByMonth,
     transactionsToCSV: transactionsToCSV, visibleSubscriptions: visibleSubscriptions,
     detectDuplicates: detectDuplicates, savingsGoalStatus: savingsGoalStatus,
-    spendPace: spendPace
+    spendPace: spendPace, detectRecurringIncome: detectRecurringIncome,
+    detectOutliers: detectOutliers, categoryTrends: categoryTrends
   };
 });

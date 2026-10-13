@@ -139,6 +139,33 @@ const appJs = fs.readFileSync('/home/hatch/workspace/budgetlens-ai/js/app.js', '
 (/renderPace\(\)/.test(appJs) && /renderGoal\(\)/.test(appJs) && /renderDupes\(\)/.test(appJs) && /bl_goal/.test(appJs))
   ? ok('flow15: app renders pace/goal/duplicates and persists the goal') : bad('flow15: app wiring missing');
 
+// Flow 16: recurring income — ACME CORP PAYROLL $3200 x3 months in the sample
+const rincE = a.recurringIncome || [];
+const acme = rincE.find(r => /ACME/.test(r.merchant));
+(acme && acme.monthly === 3200 && acme.occurrences === 3 && acme.months.length === 3)
+  ? ok('flow16: ACME CORP PAYROLL detected as recurring income ($3,200/mo x3)')
+  : bad('flow16: recurring income missing: ' + JSON.stringify(rincE.map(r => r.merchant)));
+
+// Flow 17: outlier scan over sample data — sane shape, no crashes
+const eOut = A.detectOutliers(a.transactions);
+(Array.isArray(eOut) && eOut.every(o => o.ratio >= 3 && o.merchant && o.amount < 0) &&
+  eOut.every((o, i) => i === 0 || eOut[i - 1].ratio >= o.ratio))
+  ? ok('flow17: outlier scan clean (' + eOut.length + ' flagged, ratios >= 3x, sorted desc)')
+  : bad('flow17: outliers broken');
+
+// Flow 18: category trends over the sample's 3 months
+const eTr = A.categoryTrends(a.byCatMonth);
+const sortedDesc = eTr.every((t, i) => i === 0 || Math.abs(eTr[i - 1].pct) >= Math.abs(t.pct));
+(eTr.length > 0 && sortedDesc && eTr.every(t => t.name && typeof t.pct === 'number' && typeof t.up === 'boolean'))
+  ? ok('flow18: ' + eTr.length + ' category trends computed, sorted by |pct| desc (top: ' + eTr[0].name + ' ' + eTr[0].pct + '%)')
+  : bad('flow18: category trends broken');
+
+// Flow 19: dashboard + subscriptions DOM hosts the three new widgets
+(/id="outlierBox"/.test(html) && /id="trendBox"/.test(html) && /id="incomeList"/.test(html))
+  ? ok('flow19: DOM has outlierBox, trendBox, incomeList') : bad('flow19: new widgets missing from DOM');
+(/renderOutliers\(\)/.test(appJs) && /renderCatTrends\(\)/.test(appJs) && /renderIncome\(\)/.test(appJs))
+  ? ok('flow19: app wires renderOutliers/renderCatTrends/renderIncome') : bad('flow19: app wiring missing');
+
 console.log('---');
 console.log('e2e: ' + pass + ' passed, ' + fail + ' failed');
 process.exit(fail ? 1 : 0);

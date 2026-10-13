@@ -63,9 +63,12 @@
     renderPace();
     renderGoal();
     renderDupes();
+    renderOutliers();
+    renderCatTrends();
     renderBudgets();
     renderTransactions();
     renderSubscriptions();
+    renderIncome();
     renderNudges();
   }
 
@@ -192,6 +195,38 @@
         }).join("<br>") + '</div></div>' +
         '<div class="r"><div><strong>' + BL.money(g.amount) + '</strong></div>' +
         '<div class="muted">×' + g.txs.length + " charges</div></div></div>";
+    }).join("");
+  }
+
+  function renderOutliers() {
+    var host = $("outlierBox");
+    if (!host || !state.analysis) return;
+    var outs = BL.detectOutliers(state.rawTxs);
+    if (!outs.length) {
+      host.innerHTML = '<p class="muted">No unusually large charges. Nothing sticking out.</p>';
+      return;
+    }
+    host.innerHTML = outs.slice(0, 10).map(function (o) {
+      var d = o.date instanceof Date ? o.date : new Date(o.date);
+      return '<div class="merch-row"><span>' + esc(o.description) + '<br><span class="muted">' +
+        d.toISOString().slice(0, 10) + " · " + esc(o.categoryName) + " · usually around " + BL.money(o.median) + "</span></span>" +
+        '<span><strong class="neg">' + BL.money(o.amount) + '</strong> <span class="muted">' + o.ratio + "×</span></span></div>";
+    }).join("");
+  }
+
+  function renderCatTrends() {
+    var host = $("trendBox");
+    if (!host || !state.analysis) return;
+    var trends = BL.categoryTrends(state.analysis.byCatMonth);
+    if (!trends.length) {
+      host.innerHTML = '<p class="muted">Need at least two months of data to spot trends.</p>';
+      return;
+    }
+    host.innerHTML = trends.slice(0, 8).map(function (t) {
+      var arrow = t.up ? '<span class="neg">▲</span>' : '<span class="pos">▼</span>';
+      var sign = t.pct > 0 ? "+" : "";
+      return '<div class="merch-row"><span>' + esc(t.icon) + " " + esc(t.name) + "</span><span>" + arrow + " " +
+        sign + t.pct + '% <span class="muted">' + BL.money(t.last) + " vs " + BL.money(t.avg) + " avg</span></span></div>";
     }).join("");
   }
 
@@ -336,6 +371,26 @@
       saveStore();
       renderSubscriptions();
     });
+  }
+
+  function renderIncome() {
+    var host = $("incomeList");
+    if (!host || !state.analysis) return;
+    var inc = state.analysis.recurringIncome;
+    if (!inc.length) {
+      host.innerHTML = '<p class="muted">No recurring income detected. Steady paychecks or payouts will show up here.</p>';
+      return;
+    }
+    var total = inc.reduce(function (s, x) { return s + x.monthly; }, 0);
+    var html = '<div class="sub-total">Detected <strong>' + inc.length + "</strong> recurring income source" +
+      (inc.length === 1 ? "" : "s") + " totaling <strong>" + BL.money(total) + "/mo</strong></div>";
+    inc.forEach(function (s) {
+      html += '<div class="sub-card"><div><div class="sub-name">' + esc(s.merchant) + "</div>" +
+        '<div class="muted">' + esc(s.example) + " · " + s.occurrences + " deposits across " + s.months.length + " months</div></div>" +
+        '<div class="r"><div><strong class="pos">' + BL.money(s.monthly) + "/mo</strong></div>" +
+        '<div class="muted">' + BL.money(s.yearly) + "/yr</div></div></div>";
+    });
+    host.innerHTML = html;
   }
 
   function renderNudges() {

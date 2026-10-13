@@ -138,13 +138,56 @@ const pc = A.spendPace(ptx, new Date('2026-10-12T12:00:00Z').getTime());
 (pc.spent === 120 && pc.perDay === 10 && pc.projected === 310 && pc.lastMonth === 900 && pc.dayOfMonth === 12 && pc.daysInMonth === 31)
   ? ok('spendPace: $10/day, $310 projected, $900 last month') : bad('spendPace: ' + JSON.stringify(pc));
 
+// detectRecurringIncome: consistent deposits across 2+ months; one-off ignored
+const ia = A.analyze([
+  { date: '2026-07-01', description: 'ACME CORP PAYROLL', amount: 3200 },
+  { date: '2026-08-01', description: 'ACME CORP PAYROLL', amount: 3200 },
+  { date: '2026-09-01', description: 'ACME CORP PAYROLL', amount: 3205 },
+  { date: '2026-08-15', description: 'ONE TIME BONUS', amount: 500 }
+], {});
+const rinc = A.detectRecurringIncome(ia.byMerchant);
+(rinc.length === 1 && rinc[0].monthly === 3200 && rinc[0].occurrences === 3 && Math.abs(rinc[0].yearly - 38400) < 1)
+  ? ok('detectRecurringIncome: ACME $3200/mo x3 -> $38,400/yr; one-off ignored')
+  : bad('detectRecurringIncome: ' + JSON.stringify(rinc.map(r => [r.merchant, r.monthly])));
+(ia.recurringIncome && ia.recurringIncome.length === 1)
+  ? ok('analyze() exposes recurringIncome in its result') : bad('analyze() missing recurringIncome');
+const single = A.analyze([{ date: '2026-07-01', description: 'GIG PAYOUT', amount: 400 }], {});
+(A.detectRecurringIncome(single.byMerchant).length === 0)
+  ? ok('detectRecurringIncome: single deposit -> []') : bad('detectRecurringIncome single');
+
+// detectOutliers: 3x+ median and $50+ flagged; sub-$50 ignored
+const otx = [];
+for (let i = 0; i < 5; i++) otx.push({ date: '2026-07-0' + (i + 1), description: 'STARBUCKS STORE #' + i, amount: -6 });
+otx.push({ date: '2026-07-10', description: 'STARBUCKS CATERING', amount: -85 });
+otx.push({ date: '2026-07-11', description: 'STARBUCKS GIFT CARD', amount: -49 });
+const outs = A.detectOutliers(A.analyze(otx, {}).transactions);
+(outs.length === 1 && outs[0].amount === -85 && outs[0].ratio >= 14 && outs[0].median === 6)
+  ? ok('detectOutliers: $85 vs $6 median flagged at ' + outs[0].ratio + 'x; $49 under floor ignored')
+  : bad('detectOutliers: ' + JSON.stringify(outs.map(o => [o.amount, o.ratio])));
+(A.detectOutliers([]).length === 0) ? ok('detectOutliers: empty -> []') : bad('detectOutliers empty');
+
+// categoryTrends: latest month vs prior-months average, needs >= 2 months
+const ca = A.analyze([
+  { date: '2026-07-05', description: 'STARBUCKS #1', amount: -100 },
+  { date: '2026-08-05', description: 'STARBUCKS #2', amount: -100 },
+  { date: '2026-09-05', description: 'STARBUCKS #3', amount: -200 }
+], {});
+const tr = A.categoryTrends(ca.byCatMonth);
+(tr.length >= 1 && tr[0].id === 'dining' && tr[0].pct === 100 && tr[0].up === true && tr[0].last === 200 && tr[0].avg === 100)
+  ? ok('categoryTrends: dining $200 vs $100 avg -> +100% up') : bad('categoryTrends: ' + JSON.stringify(tr));
+const ca1 = A.analyze([{ date: '2026-07-05', description: 'STARBUCKS #1', amount: -100 }], {});
+(A.categoryTrends(ca1.byCatMonth).length === 0)
+  ? ok('categoryTrends: single month -> []') : bad('categoryTrends single month');
+(ca.byCatMonth && ca.byCatMonth.dining && ca.byCatMonth.dining['2026-07'] === 100)
+  ? ok('analyze() exposes byCatMonth aggregate') : bad('analyze() missing byCatMonth');
+
 console.log('NEW_PASS=' + pass + ' NEW_FAIL=' + fail);
 process.exit(fail ? 1 : 0);
 NODEEOF
 [ $? -eq 0 ] && ok "new-feature node checks green" || bad "new-feature node checks had failures"
 
 # new DOM ids present
-for id in monthPick budgetForm budgetList txSearch txCatFilter txExport txPrint txCount pane-budgets; do
+for id in monthPick budgetForm budgetList txSearch txCatFilter txExport txPrint txCount pane-budgets incomeList outlierBox trendBox; do
   grep -q "id=\"$id\"" index.html && ok "index.html has #$id" || bad "index.html missing #$id"
 done
 
