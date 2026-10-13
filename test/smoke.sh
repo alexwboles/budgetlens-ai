@@ -8,12 +8,12 @@ ok()   { PASS=$((PASS+1)); echo "PASS: $1"; }
 bad()  { FAIL=$((FAIL+1)); echo "FAIL: $1"; }
 
 # 1. expected files exist
-for f in index.html css/style.css js/categorize.js js/analyze.js js/app.js data/sample.csv README.md; do
+for f in index.html css/style.css js/categorize.js js/analyze.js js/plan.js js/app.js data/sample.csv README.md REDESIGN-AUDIT.md; do
   [ -f "$f" ] && ok "file exists: $f" || bad "missing file: $f"
 done
 
 # 2. JS syntax valid
-for f in js/categorize.js js/analyze.js js/app.js; do
+for f in js/categorize.js js/analyze.js js/plan.js js/app.js; do
   node --check "$f" 2>/dev/null && ok "syntax ok: $f" || bad "syntax error: $f"
 done
 
@@ -186,8 +186,66 @@ process.exit(fail ? 1 : 0);
 NODEEOF
 [ $? -eq 0 ] && ok "new-feature node checks green" || bad "new-feature node checks had failures"
 
+# plan engine (js/plan.js): envelope math, suggestions, cover, reports
+node << 'NODEEOF'
+const BL = require('/home/hatch/workspace/budgetlens-ai/js/categorize.js');
+const A  = require('/home/hatch/workspace/budgetlens-ai/js/analyze.js');
+const P  = require('/home/hatch/workspace/budgetlens-ai/js/plan.js');
+let pass = 0, fail = 0;
+const ok  = (n) => { pass++; console.log('PASS: ' + n); };
+const bad = (n) => { fail++; console.log('FAIL: ' + n); };
+
+const a = A.analyze([
+  { date: '2026-08-01', description: 'ACME CORP PAYROLL', amount: 3200 },
+  { date: '2026-08-02', description: 'CITY APARTMENTS RENT', amount: -1450 },
+  { date: '2026-08-03', description: 'STARBUCKS #1', amount: -12 },
+  { date: '2026-07-01', description: 'ACME CORP PAYROLL', amount: 3200 },
+  { date: '2026-07-02', description: 'STARBUCKS #2', amount: -20 }
+], {});
+
+// planForMonth: income/assigned/ready math, over flags
+const plan = P.planForMonth(a, '2026-08', { housing: 1450, dining: 10 });
+const dining = plan.groups[1].rows.find(r => r.id === 'dining');
+(plan.income === 3200 && plan.assigned === 1460 && plan.ready === 1740)
+  ? ok('planForMonth: income 3200, assigned 1460, ready 1740') : bad('planForMonth math: ' + JSON.stringify([plan.income, plan.assigned, plan.ready]));
+(dining.activity === 12 && dining.available === -2 && dining.over === true)
+  ? ok('planForMonth: dining $12 activity vs $10 budgeted -> over, -$2 available') : bad('dining row: ' + JSON.stringify(dining));
+(plan.groups.length === 3 && plan.groups.every(g => g.rows.length === 4))
+  ? ok('planForMonth: 3 groups x 4 categories, names: ' + plan.groups.map(g => g.name).join('/')) : bad('plan groups');
+(plan.groups[0].rows[0].id === 'housing' && plan.groups[0].budgeted === 1450)
+  ? ok('planForMonth: group totals roll up') : bad('group rollup');
+const noAssign = P.planForMonth(a, '2026-08', {});
+(noAssign.assigned === 0 && noAssign.ready === 3200)
+  ? ok('planForMonth: no assignments -> ready equals full income') : bad('no-assign');
+
+// suggestAssignments: previous month's spend (dining $20 from July)
+const sug = P.suggestAssignments(a, '2026-08');
+(sug.dining === 20 && sug.housing === 0)
+  ? ok('suggestAssignments: uses prior month spend (dining $20)') : bad('suggest: ' + JSON.stringify(sug));
+
+// coverFromPool: moves from ready into category
+const covered = P.coverFromPool(plan, { housing: 1450, dining: 10 }, 'dining', 2);
+(covered && covered.dining === 12)
+  ? ok('coverFromPool: dining 10 -> 12 when pool covers $2') : bad('cover: ' + JSON.stringify(covered));
+(P.coverFromPool(plan, { housing: 1450, dining: 10 }, 'dining', 2000) === null)
+  ? ok('coverFromPool: null when pool cannot cover') : bad('cover should be null');
+
+// incomeVsExpense + categoryShare
+const ive = P.incomeVsExpense(a.byMonth);
+(ive.length === 2 && ive[0].month === '2026-07' && ive[1].kept === 1738 && ive[1].savingsRate === 54)
+  ? ok('incomeVsExpense: 2 months, kept/savingsRate math (1738, 54%)') : bad('ive: ' + JSON.stringify(ive));
+const share = P.categoryShare(a.byCat);
+(share.length > 0 && share[0].id === 'housing' && share.reduce((s, x) => s + x.pct, 0) <= 101)
+  ? ok('categoryShare: housing top, shares sane') : bad('share: ' + JSON.stringify(share));
+(P.categoryShare({}).length === 0) ? ok('categoryShare: empty -> []') : bad('share empty');
+
+console.log('PLAN_PASS=' + pass + ' PLAN_FAIL=' + fail);
+process.exit(fail ? 1 : 0);
+NODEEOF
+[ $? -eq 0 ] && ok "plan-engine node checks green" || bad "plan-engine node checks had failures"
+
 # new DOM ids present
-for id in monthPick budgetForm budgetList txSearch txCatFilter txExport txPrint txCount pane-budgets incomeList outlierBox trendBox; do
+for id in monthPick budgetForm budgetList txSearch txCatFilter txExport txPrint txCount pane-budgets incomeList outlierBox trendBox pane-plan pane-reports planBanner planMonthLabel planPrev planNext planAuto planClear planTable reportIve reportRate reportShare; do
   grep -q "id=\"$id\"" index.html && ok "index.html has #$id" || bad "index.html missing #$id"
 done
 

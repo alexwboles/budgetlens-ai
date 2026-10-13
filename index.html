@@ -32,6 +32,8 @@
   <div class="tabs-inner">
     <button class="tab active" data-tab="upload">Upload</button>
     <button class="tab" data-tab="dashboard">Dashboard</button>
+    <button class="tab" data-tab="plan">Plan</button>
+    <button class="tab" data-tab="reports">Reports</button>
     <button class="tab" data-tab="budgets">Budgets</button>
     <button class="tab" data-tab="transactions">Transactions</button>
     <button class="tab" data-tab="subscriptions">Subscriptions</button>
@@ -123,6 +125,50 @@
     </div>
   </section>
 
+  <section id="pane-plan" class="pane">
+    <div class="plan-banner" id="planBanner"></div>
+    <div class="plan-toolbar">
+      <div class="stepper">
+        <button class="btn btn-secondary btn-small" id="planPrev" aria-label="Previous month">&larr;</button>
+        <span class="stepper-label" id="planMonthLabel"></span>
+        <button class="btn btn-secondary btn-small" id="planNext" aria-label="Next month">&rarr;</button>
+      </div>
+      <div class="plan-actions">
+        <button class="btn btn-secondary btn-small" id="planAuto">Auto-assign from last month</button>
+        <button class="btn btn-secondary btn-small" id="planClear">Clear plan</button>
+      </div>
+    </div>
+    <div class="card plan-card">
+      <div class="card-head">
+        <div>
+          <h2>Envelope plan</h2>
+          <p class="muted">Give every dollar a job. Assign this month's income to categories — what's left is Ready to Assign. Cover overspending straight from the pool.</p>
+        </div>
+      </div>
+      <div id="planTable"></div>
+    </div>
+  </section>
+
+  <section id="pane-reports" class="pane">
+    <div class="card">
+      <h2>Income vs expenses</h2>
+      <p class="muted">What came in, what went out, and what you kept — per month.</p>
+      <div id="reportIve"></div>
+    </div>
+    <div class="dash-grid">
+      <div class="card">
+        <h2>Savings rate</h2>
+        <p class="muted">Share of income kept each month.</p>
+        <div id="reportRate"></div>
+      </div>
+      <div class="card">
+        <h2>Where the money goes</h2>
+        <p class="muted">Share of total spending by category.</p>
+        <div id="reportShare"></div>
+      </div>
+    </div>
+  </section>
+
   <section id="pane-budgets" class="pane">
     <div class="card">
       <h2>Monthly budgets</h2>
@@ -185,6 +231,7 @@
 
 <script src="js/categorize.js"></script>
 <script src="js/analyze.js"></script>
+<script src="js/plan.js"></script>
 <script src="js/app.js"></script>
 </body>
 </html>

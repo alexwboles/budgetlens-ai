@@ -2,7 +2,7 @@
 (function () {
   "use strict";
   var BL = window.BudgetLens;
-  var state = { analysis: null, overrides: {}, txCount: 0, rawTxs: [], month: "", budgets: {}, dismissed: {}, txQ: "", txCat: "all", goal: "" };
+  var state = { analysis: null, overrides: {}, txCount: 0, rawTxs: [], month: "", budgets: {}, dismissed: {}, txQ: "", txCat: "all", goal: "", planMonth: "", plan: {} };
 
   function $(id) { return document.getElementById(id); }
 
@@ -15,12 +15,15 @@
     catch (e) { state.dismissed = {}; }
     try { state.goal = localStorage.getItem("bl_goal") || ""; }
     catch (e) { state.goal = ""; }
+    try { state.plan = JSON.parse(localStorage.getItem("bl_plan") || "{}"); }
+    catch (e) { state.plan = {}; }
   }
   function saveStore() {
     try {
       localStorage.setItem("bl_overrides", JSON.stringify(state.overrides));
       localStorage.setItem("bl_budgets", JSON.stringify(state.budgets));
       localStorage.setItem("bl_dismissed", JSON.stringify(state.dismissed));
+      localStorage.setItem("bl_plan", JSON.stringify(state.plan));
     } catch (e) {}
   }
 
@@ -42,6 +45,8 @@
     state.analysis = BL.analyze(txs, state.overrides);
     state.rawTxs = state.analysis.transactions; // carries month + category for scoping
     state.month = "";
+    var pmonths = Object.keys(state.analysis.byMonth).sort();
+    state.planMonth = pmonths[pmonths.length - 1] || "";
     $("uploadMsg").textContent = "Loaded " + txs.length + " transactions" + (label ? " from " + label : "") + ".";
     renderAll();
     showTab("dashboard");
@@ -70,6 +75,8 @@
     renderSubscriptions();
     renderIncome();
     renderNudges();
+    renderPlan();
+    renderReports();
   }
 
   var MONTH_NAMES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -403,6 +410,133 @@
     $("nudgeList").innerHTML = html || '<p class="muted">Load transactions to get personalized nudges.</p>';
   }
 
+  /* ---------- plan (envelope) ---------- */
+
+  function planAssignments() { return state.plan[state.planMonth] || {}; }
+  function savePlan(month, assigns) {
+    if (!month) return;
+    state.plan[month] = assigns;
+    saveStore();
+  }
+
+  function stepPlan(dir) {
+    var months = Object.keys(state.analysis.byMonth).sort();
+    var i = months.indexOf(state.planMonth);
+    i = Math.max(0, Math.min(months.length - 1, i + dir));
+    state.planMonth = months[i] || state.planMonth;
+    renderPlan();
+  }
+
+  function renderPlan() {
+    var host = $("planTable"), banner = $("planBanner");
+    if (!host || !banner || !state.analysis) return;
+    var months = Object.keys(state.analysis.byMonth).sort();
+    if (!state.planMonth || months.indexOf(state.planMonth) < 0) {
+      state.planMonth = months[months.length - 1] || "";
+    }
+    $("planMonthLabel").textContent = state.planMonth ? monthLabel(state.planMonth) : "—";
+    $("planPrev").disabled = months.indexOf(state.planMonth) <= 0;
+    $("planNext").disabled = months.indexOf(state.planMonth) >= months.length - 1;
+    if (!state.planMonth) {
+      banner.innerHTML = '<div class="rta"><div class="rta-label">Ready to assign</div><div class="rta-value">—</div></div>';
+      host.innerHTML = '<p class="muted">Load transactions to build a plan.</p>';
+      return;
+    }
+    var plan = BL.planForMonth(state.analysis, state.planMonth, planAssignments());
+    var readyCls = plan.ready > 0 ? "pos" : (plan.ready < 0 ? "neg" : "");
+    var assignPct = plan.income > 0 ? Math.min(100, Math.round(plan.assigned / plan.income * 100)) : 0;
+    var bh = '<div class="rta"><div><div class="rta-label">Ready to assign</div>' +
+      '<div class="rta-value ' + readyCls + '">' + BL.money(plan.ready) + "</div></div>" +
+      '<div class="rta-meter"><div class="rta-meter-row"><span>Income assigned</span><span>' + assignPct + "%</span></div>" +
+      '<div class="rta-track"><div class="rta-fill" style="width:' + assignPct + '%"></div></div>' +
+      '<div class="rta-meta">' + BL.money(plan.income) + " income in " + esc(monthLabel(plan.month)) +
+      " · " + BL.money(plan.assigned) + " assigned</div></div></div>";
+    if (plan.ready < 0) {
+      bh += '<div class="plan-warn">You assigned ' + BL.money(-plan.ready) + " more than this month\u2019s income. Trim a category or cover it with less.</div>";
+    }
+    bh += '<div id="planNote" class="plan-note"></div>';
+    banner.innerHTML = bh;
+
+    var html = '<div class="plan-row plan-head"><span>Category</span><span class="r">Budgeted</span><span class="r">Activity</span><span class="r">Available</span><span></span></div>';
+    plan.groups.forEach(function (g) {
+      html += '<div class="plan-row plan-group"><span>' + esc(g.name) + "</span>" +
+        '<span class="r">' + BL.money(g.budgeted) + '</span><span class="r">' + BL.money(g.activity) + "</span>" +
+        '<span class="r ' + (g.available < 0 ? "neg" : "pos") + '">' + BL.money(g.available) + "</span><span></span></div>";
+      g.rows.forEach(function (r) {
+        var cls = r.over ? "neg" : (r.available > 0 ? "pos" : "");
+        html += '<div class="plan-row' + (r.over ? " over" : "") + '"><span>' + esc(r.name) + "</span>" +
+          '<span class="r"><input type="number" min="0" step="1" class="plan-input" data-plan-cat="' + r.id +
+          '" value="' + (r.budgeted ? r.budgeted : "") + '" placeholder="0" aria-label="Budget for ' + esc(r.name) + '"></span>' +
+          '<span class="r">' + BL.money(r.activity) + '</span>' +
+          '<span class="r ' + cls + '"><strong>' + BL.money(r.available) + "</strong></span>" +
+          '<span class="r">' + (r.over
+            ? '<button class="btn btn-secondary btn-small" data-cover="' + r.id + '" data-amt="' + (-r.available).toFixed(2) + '">Cover ' + BL.money(-r.available) + "</button>"
+            : "") + "</span></div>";
+      });
+    });
+    host.innerHTML = html;
+
+    host.querySelectorAll("[data-plan-cat]").forEach(function (inp) {
+      inp.addEventListener("change", function () {
+        var a = Object.assign({}, planAssignments());
+        var v = parseFloat(inp.value);
+        if (v > 0) a[inp.getAttribute("data-plan-cat")] = Math.round(v * 100) / 100;
+        else delete a[inp.getAttribute("data-plan-cat")];
+        savePlan(state.planMonth, a);
+        renderPlan();
+      });
+    });
+    host.querySelectorAll("[data-cover]").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        var note = $("planNote");
+        var next = BL.coverFromPool(plan, planAssignments(), btn.getAttribute("data-cover"), parseFloat(btn.getAttribute("data-amt")));
+        if (!next) {
+          if (note) note.textContent = "Not enough in Ready to Assign to cover that.";
+          return;
+        }
+        savePlan(state.planMonth, next);
+        renderPlan();
+      });
+    });
+  }
+
+  /* ---------- reports ---------- */
+
+  function renderReports() {
+    if (!state.analysis) return;
+    var ive = $("reportIve"), rate = $("reportRate"), share = $("reportShare");
+    if (!ive || !rate || !share) return;
+    var rows = BL.incomeVsExpense(state.analysis.byMonth);
+    if (!rows.length) {
+      ive.innerHTML = rate.innerHTML = share.innerHTML = '<p class="muted">Load transactions to see reports.</p>';
+      return;
+    }
+    var maxV = Math.max.apply(null, rows.map(function (r) { return Math.max(r.in, r.out); }).concat([1]));
+    ive.innerHTML = rows.map(function (r) {
+      var iw = Math.max(3, Math.round(r.in / maxV * 100));
+      var ow = Math.max(3, Math.round(r.out / maxV * 100));
+      return '<div class="rep-month"><div class="rep-mlabel">' + esc(monthLabel(r.month)) + "</div>" +
+        '<div class="rep-bars">' +
+        '<div class="rep-bar-row"><span class="rep-blabel">In</span><div class="rep-track"><div class="rep-fill in" style="width:' + iw + '%"></div></div><span class="rep-val pos">' + BL.money(r.in) + "</span></div>" +
+        '<div class="rep-bar-row"><span class="rep-blabel">Out</span><div class="rep-track"><div class="rep-fill out" style="width:' + ow + '%"></div></div><span class="rep-val neg">' + BL.money(r.out) + "</span></div>" +
+        "</div>" +
+        '<div class="rep-kept ' + (r.kept >= 0 ? "pos" : "neg") + '">Kept ' + BL.money(r.kept) + "</div></div>";
+    }).join("");
+    rate.innerHTML = rows.map(function (r) {
+      var w = Math.max(3, Math.min(100, r.savingsRate));
+      var good = r.savingsRate >= 20;
+      return '<div class="bar-row"><div class="bar-label">' + esc(monthLabel(r.month)) + "</div>" +
+        '<div class="bar-track"><div class="bar-fill' + (good ? "" : " behind") + '" style="width:' + w + '%"></div></div>' +
+        '<div class="bar-val">' + r.savingsRate + "%</div></div>";
+    }).join("");
+    var sh = BL.categoryShare(state.analysis.byCat);
+    share.innerHTML = sh.length ? sh.slice(0, 8).map(function (s) {
+      return '<div class="bar-row"><div class="bar-label">' + esc(s.name) + "</div>" +
+        '<div class="bar-track"><div class="bar-fill" style="width:' + Math.max(3, s.pct) + '%"></div></div>' +
+        '<div class="bar-val">' + s.pct + "%</div></div>";
+    }).join("") : '<p class="muted">No spending yet.</p>';
+  }
+
   /* ---------- wiring ---------- */
 
   document.addEventListener("DOMContentLoaded", function () {
@@ -415,6 +549,19 @@
     $("monthPick").addEventListener("change", function (e) {
       state.month = e.target.value;
       renderAll();
+    });
+
+    $("planPrev").addEventListener("click", function () { stepPlan(-1); });
+    $("planNext").addEventListener("click", function () { stepPlan(1); });
+    $("planAuto").addEventListener("click", function () {
+      if (!state.analysis || !state.planMonth) return;
+      savePlan(state.planMonth, BL.suggestAssignments(state.analysis, state.planMonth));
+      renderPlan();
+    });
+    $("planClear").addEventListener("click", function () {
+      if (!state.planMonth) return;
+      savePlan(state.planMonth, {});
+      renderPlan();
     });
 
     var txSearch = $("txSearch");

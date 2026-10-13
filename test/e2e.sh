@@ -166,6 +166,55 @@ const sortedDesc = eTr.every((t, i) => i === 0 || Math.abs(eTr[i - 1].pct) >= Ma
 (/renderOutliers\(\)/.test(appJs) && /renderCatTrends\(\)/.test(appJs) && /renderIncome\(\)/.test(appJs))
   ? ok('flow19: app wires renderOutliers/renderCatTrends/renderIncome') : bad('flow19: app wiring missing');
 
+
+// Flow 20: plan tab DOM + app wiring (YNAB-style envelope)
+(/id="pane-plan"/.test(html) && /id="pane-reports"/.test(html) && /id="planBanner"/.test(html) &&
+  /id="planTable"/.test(html) && /id="planPrev"/.test(html) && /id="planAuto"/.test(html) &&
+  /id="reportIve"/.test(html) && /id="reportRate"/.test(html) && /id="reportShare"/.test(html))
+  ? ok('flow20: plan + reports panes and hosts present') : bad('flow20: plan/reports DOM missing');
+(/renderPlan\(\)/.test(appJs) && /renderReports\(\)/.test(appJs) && /bl_plan/.test(appJs) &&
+  /planForMonth/.test(appJs) && /suggestAssignments/.test(appJs) && /coverFromPool/.test(appJs) &&
+  /stepPlan/.test(appJs))
+  ? ok('flow20: app wires renderPlan/renderReports, persists bl_plan, stepper + auto + cover') : bad('flow20: plan app wiring missing');
+(/js\/plan\.js/.test(html))
+  ? ok('flow20: plan.js script included in index.html') : bad('flow20: plan.js script tag missing');
+
+// Flow 21: plan e2e over sample data — Aug 2026 latest month, envelope consistency
+const P = require('/home/hatch/workspace/budgetlens-ai/js/plan.js');
+const pmonths = Object.keys(a.byMonth).sort();
+const latest = pmonths[pmonths.length - 1];
+const pPlan = P.planForMonth(a, latest, {});
+const augIncome = a.transactions.filter(t => t.month === latest && t.amount >= 0).reduce((s, t) => s + t.amount, 0);
+(Math.abs(pPlan.income - augIncome) < 0.01 && pPlan.ready === pPlan.income && pPlan.assigned === 0)
+  ? ok('flow21: plan for ' + latest + ' starts with full income ready (' + A.money(pPlan.ready) + ')')
+  : bad('flow21: plan init wrong: ' + JSON.stringify([pPlan.income, pPlan.ready]));
+const pSug = P.suggestAssignments(a, latest);
+const sugTotal = Object.keys(pSug).reduce((s, k) => s + pSug[k], 0);
+(sugTotal > 0 && sugTotal <= pPlan.income * 2)
+  ? ok('flow21: auto-assign suggests ' + A.money(sugTotal) + ' across categories')
+  : bad('flow21: suggestions empty/insane: ' + sugTotal);
+// full flow: suggest -> plan -> cover an overage
+const pPlan2 = P.planForMonth(a, latest, pSug);
+const poverRows = pPlan2.groups.flatMap(g => g.rows).filter(r => r.over);
+(pPlan2.ready >= 0 || poverRows.length > 0)
+  ? ok('flow21: suggested plan consistent (ready ' + A.money(pPlan2.ready) + ', ' + poverRows.length + ' overages)')
+  : bad('flow21: suggested plan inconsistent');
+if (poverRows.length) {
+  const first = poverRows[0];
+  const cov = P.coverFromPool(pPlan2, pSug, first.id, -first.available);
+  (cov && Math.abs(cov[first.id] - (pSug[first.id] - first.available)) < 0.01)
+    ? ok('flow21: cover ' + first.name + ' overage ' + A.money(-first.available) + ' from pool')
+    : bad('flow21: cover failed for ' + first.id);
+}
+// reports: income vs expense rows + shares over sample months
+const pIve = P.incomeVsExpense(a.byMonth);
+(pIve.length === pmonths.length && pIve.every(r => r.month && typeof r.savingsRate === 'number'))
+  ? ok('flow21: incomeVsExpense covers ' + pIve.length + ' months') : bad('flow21: ive broken');
+const pShare = P.categoryShare(a.byCat);
+(pShare.length > 0 && pShare[0].pct > 0 && pShare[0].pct <= 100)
+  ? ok('flow21: categoryShare top = ' + pShare[0].name + ' at ' + pShare[0].pct + '%')
+  : bad('flow21: share broken');
+
 console.log('---');
 console.log('e2e: ' + pass + ' passed, ' + fail + ' failed');
 process.exit(fail ? 1 : 0);
